@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>像素猎手 · PIXEL HUNTER 3D</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body{ height:100%; overflow:hidden; background:#05070d;
+    font-family:'Courier New',monospace; color:#8ab; }
+  #game{ display:block; width:100vw; height:100vh; cursor:crosshair; }
+
+  /* ---------- HUD ---------- */
+  #hud{ position:fixed; inset:0; pointer-events:none; z-index:10; }
+  #hp{ position:absolute; top:14px; left:10px; display:flex; gap:3px; }
+  #hp .heart{ width:16px; height:14px; background:#ff4d6d;
+    clip-path:polygon(50% 100%,0 35%,25% 0,50% 22%,75% 0,100% 35%);
+    filter:drop-shadow(0 0 3px #ff4d6d); }
+  #hp .heart.empty{ background:#33202a; filter:none; }
+  #xpbar{ position:absolute; top:0; left:0; width:100%; height:4px; background:#0e1728; }
+  #xpfill{ height:100%; width:0; background:linear-gradient(90deg,#3fa9f5,#8fd8ff);
+    box-shadow:0 0 8px #3fa9f5; transition:width .12s linear; }
+  #topright{ position:absolute; top:12px; right:12px; text-align:right;
+    text-shadow:0 0 6px #000; }
+  #score{ font-weight:bold; font-size:15px; color:#e8f4ff; }
+  #wave{ font-size:12px; color:#7fa8d8; margin-top:2px; }
+  #combo{ position:absolute; top:30px; left:0; right:0; text-align:center;
+    font-weight:bold; font-size:15px; color:#ffd166; text-shadow:0 0 8px #000; }
+  #dashwrap{ position:absolute; bottom:14px; left:10px; width:60px; height:6px;
+    background:#13203a; border:1px solid #234; }
+  #dashfill{ height:100%; width:100%; background:#6cf8ff; box-shadow:0 0 6px #6cf8ff; }
+  #dashwrap span{ position:absolute; left:66px; top:-3px; font-size:9px; color:#4a6a8a; }
+  #hint{ position:absolute; bottom:8px; left:0; right:0; text-align:center;
+    font-size:11px; opacity:.4; letter-spacing:1px; }
+  #nextwave{ position:absolute; bottom:34px; left:0; right:0; text-align:center;
+    font-size:11px; color:#8fb8e0; }
+
+  /* ---------- 覆盖层 ---------- */
+  #overlay{ position:fixed; inset:0; z-index:20; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center;
+    background:rgba(5,8,16,.82); backdrop-filter:blur(2px); }
+  #overlay.hidden{ display:none; }
+  #overlay h1{ font-size:42px; color:#4a9eff; letter-spacing:4px;
+    text-shadow:0 0 18px #1a3a7a; }
+  #overlay .sub{ color:#2a4a7a; font-size:13px; letter-spacing:6px; margin-top:4px; }
+  #overlay .blink{ margin-top:30px; font-size:15px; color:#fff; animation:bk 1s steps(2) infinite; }
+  #overlay p{ color:#7f9ab8; font-size:12px; margin-top:14px; line-height:1.9; }
+  #overlay .big{ font-size:26px; color:#ff4d6d; margin-bottom:8px; }
+  #overlay .stat{ font-size:15px; color:#dbe8f6; margin:4px 0; }
+  @keyframes bk{ 50%{ opacity:0; } }
+
+  /* ---------- 升级卡 ---------- */
+  #cards{ display:flex; gap:18px; margin-top:26px; }
+  .card{ width:150px; height:170px; background:#111a2e; border:2px solid #2a3a5a;
+    border-radius:8px; cursor:pointer; pointer-events:auto; padding:16px 12px;
+    display:flex; flex-direction:column; align-items:center; transition:.15s;
+    text-shadow:0 0 6px #000; }
+  .card:hover{ border-color:#6cf8ff; background:#1d3055; transform:translateY(-4px); }
+  .card .ico{ width:34px; height:34px; background:#3a5a8a; margin:6px 0 12px;
+    clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%); }
+  .card:hover .ico{ background:#6cf8ff; }
+  .card .nm{ color:#fff; font-weight:bold; font-size:14px; }
+  .card .ds{ color:#7f9ab8; font-size:11px; margin-top:10px; line-height:1.7; }
+  .card .key{ color:#3a5a8a; font-size:12px; margin-top:auto; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div id="xpbar"><div id="xpfill"></div></div>
+  <div id="hp"></div>
+  <div id="topright"><div id="score">分数 0</div><div id="wave">波次 1 · Lv.1</div></div>
+  <div id="combo"></div>
+  <div id="dashwrap"><div id="dashfill"></div><span>DASH</span></div>
+  <div id="nextwave"></div>
+  <div id="hint">WASD 移动 · 鼠标瞄准 · 左键射击 · 空格冲刺 · 右键拖拽旋转视角 · 滚轮缩放 · P 暂停</div>
+</div>
+
+<div id="overlay">
+  <h1>像素猎手</h1>
+  <div class="sub">P I X E L &nbsp; H U N T E R &nbsp; 3 D</div>
+  <div class="blink" id="ovBlink">点击屏幕开始</div>
+  <p>WASD 移动 · 鼠标瞄准射击<br>空格冲刺闪避 · 击杀敌人升级强化<br>在无尽的波次中活下去</p>
+</div>
+
+<!-- Three.js 通过 importmap 从 CDN 加载（版本固定 0.160.0，与本地副本一致） -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ============ 基础 ============ */
+const canvas = document.getElementById('game');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x05070d);
+scene.fog = new THREE.Fog(0x05070d, 45, 110);
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 500);
+camera.position.set(0, 42, 30);
+camera.lookAt(0, 0, 0);
+
+// 轨道控制：右键拖拽旋转视角、滚轮缩放；左键留给射击
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.enablePan = false;
+controls.minDistance = 16;
+controls.maxDistance = 95;
+controls.minPolarAngle = 0.15;
+controls.maxPolarAngle = Math.PI * 0.49;
+controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+controls.target.set(0, 0, 0);
+
+scene.add(new THREE.AmbientLight(0x4060a0, 0.7));
+const dir = new THREE.DirectionalLight(0xffffff, 0.85);
+dir.position.set(12, 40, 12);
+scene.add(dir);
+const playerLight = new THREE.PointLight(0x66ccff, 1.4, 50);
+playerLight.position.set(0, 6, 0);
+scene.add(playerLight);
+
+const ARENA = 58;
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(ARENA*2+20, ARENA*2+20),
+  new THREE.MeshStandardMaterial({ color:0x0a0c14, roughness:1, metalness:0 })
+);
+ground.rotation.x = -Math.PI/2;
+scene.add(ground);
+const grid = new THREE.GridHelper(ARENA*2+20, 60, 0x1b3a5a, 0x101826);
+grid.position.y = 0.02;
+scene.add(grid);
+const border = new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.BoxGeometry(ARENA*2, 0.1, ARENA*2)),
+  new THREE.LineBasicMaterial({ color:0x2a5a8a })
+);
+border.position.y = 0.05;
+scene.add(border);
+
+/* ============ 玩家 ============ */
+const playerGroup = new THREE.Group();
+const bodyMat = new THREE.MeshStandardMaterial({ color:0x2b5fa8, emissive:0x0a2a5a, emissiveIntensity:0.6, roughness:0.5 });
+const body = new THREE.Mesh(new THREE.ConeGeometry(1.4, 3.2, 10), bodyMat);
+body.rotation.x = Math.PI/2;
+playerGroup.add(body);
+const head = new THREE.Mesh(new THREE.SphereGeometry(1.0, 16, 16),
+  new THREE.MeshStandardMaterial({ color:0xe2ecf8, roughness:0.4 }));
+head.position.z = 1.6;
+playerGroup.add(head);
+const gun = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 1.6),
+  new THREE.MeshStandardMaterial({ color:0x8aa0c0 }));
+gun.position.set(0.0, 0.2, 2.4);
+playerGroup.add(gun);
+scene.add(playerGroup);
+
+/* ============ 敌人配置 ============ */
+const ENEMY_TYPES = {
+  slime  : { hp:2, speed:9,  r:1.5, color:0x5ad05a, xp:1, contact:1 },
+  bat    : { hp:1, speed:17, r:1.1, color:0xb06cff, xp:1, contact:1 },
+  shooter: { hp:3, speed:9,  r:1.7, color:0xff9a3c, xp:2, contact:1 },
+  tank   : { hp:9, speed:5,  r:2.8, color:0x4a9eff, xp:3, contact:2 },
+};
+
+const UPGRADES = [
+  { name:'力 量', desc:'子弹伤害 +1',            apply:p=>p.dmg+=1 },
+  { name:'速 射', desc:'射速提升 20%',           apply:p=>p.fireRate=Math.max(0.06,p.fireRate*0.8) },
+  { name:'散 射', desc:'额外发射一颗子弹',        apply:p=>p.bullets+=1 },
+  { name:'疾 行', desc:'移动速度 +15%',          apply:p=>p.speed*=1.15 },
+  { name:'体 质', desc:'最大生命 +1，回复 2 点',  apply:p=>{p.maxHp+=1;p.hp=Math.min(p.maxHp,p.hp+2);} },
+  { name:'穿 透', desc:'子弹可多穿透 1 个敌人',   apply:p=>p.pierce+=1 },
+  { name:'影 步', desc:'冲刺冷却 -25%',          apply:p=>p.dashMax*=0.75 },
+  { name:'磁 力', desc:'经验拾取范围 +45%',       apply:p=>p.magnet*=1.45 },
+  { name:'高速弹', desc:'子弹飞行速度 +25%',      apply:p=>p.bulletSpeed*=1.25 },
+  { name:'急 救', desc:'立即回复 3 点生命',       apply:p=>p.hp=Math.min(p.maxHp,p.hp+3) },
+  { name:'弹 匣', desc:'射速提升 12%，伤害 +1',   apply:p=>{p.fireRate=Math.max(0.06,p.fireRate*0.88); p.dmg+=1;} },
+];
+
+/* ============ 状态 ============ */
+let uid = 1;
+const game = {
+  state:'title', t:0,
+  wave:0, phase:'break', phaseTimer:0, spawnQueue:[], spawnTimer:0,
+  enemies:[], bullets:[], ebullets:[], gems:[], particles:[], texts:[],
+  shake:0, score:0, kills:0, combo:0, comboTimer:0, flash:0,
+  choices:[]
+};
+
+function newPlayer(){
+  return {
+    x:0, z:0, r:1.6,
+    hp:5, maxHp:5, speed:22,
+    fireRate:0.22, fireTimer:0,
+    dmg:1, bulletSpeed:62, pierce:0, bullets:1,
+    dashCd:0, dashMax:1.1, dashTime:0, dashDir:{x:1,z:0},
+    invuln:0, angle:0,
+    xp:0, level:1, xpNext:5, magnet:16
+  };
+}
+let player = newPlayer();
+const rand=(a,b)=>a+Math.random()*(b-a);
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+
+/* ============ 输入 ============ */
+const keys = Object.create(null);
+const mouse = { x:innerWidth/2, y:innerHeight/2, down:false, ndc:new THREE.Vector2() };
+const raycaster = new THREE.Raycaster();
+const groundPlane = new THREE.Plane(new THREE.Vector3(0,1,0), 0);
+const aimPoint = new THREE.Vector3();
+
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+canvas.addEventListener('mousemove', e=>{
+  mouse.x = e.clientX; mouse.y = e.clientY;
+  mouse.ndc.set((e.clientX/innerWidth)*2-1, -(e.clientY/innerHeight)*2+1);
+});
+canvas.addEventListener('mousedown', e=>{ e.preventDefault(); mouse.down=true; onClick(); });
+addEventListener('mouseup', ()=> mouse.down=false);
+canvas.addEventListener('contextmenu', e=>e.preventDefault());
+addEventListener('keydown', e=>{
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
+  keys[e.code]=true; onKeyPress(e.code);
+});
+addEventListener('keyup', e=> keys[e.code]=false);
+
+/* ============ 音效 ============ */
+let actx=null;
+function initAudio(){ if(actx) return; try{ actx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
+function sfx(freq,dur,type,vol,slide){
+  if(!actx) return;
+  const t=actx.currentTime, o=actx.createOscillator(), g=actx.createGain();
+  o.type=type||'square'; o.frequency.setValueAtTime(freq,t);
+  if(slide) o.frequency.exponentialRampToValueAtTime(Math.max(30,freq+slide),t+dur);
+  g.gain.setValueAtTime(vol||0.04,t);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t+dur+0.02);
+}
+
+/* ============ 几何辅助 ============ */
+function enemyMesh(type){
+  const c = ENEMY_TYPES[type].color;
+  const mat = new THREE.MeshStandardMaterial({ color:c, emissive:c, emissiveIntensity:0.35, roughness:0.5 });
+  let geo;
+  if(type==='slime')   geo = new THREE.SphereGeometry(ENEMY_TYPES[type].r, 16, 16);
+  else if(type==='bat')   geo = new THREE.IcosahedronGeometry(ENEMY_TYPES[type].r, 0);
+  else if(type==='shooter') geo = new THREE.BoxGeometry(3,3,3);
+  else geo = new THREE.BoxGeometry(5,5,5);
+  const m = new THREE.Mesh(geo, mat);
+  return m;
+}
+function spawnParticle(x,z,color,size){
+  if(game.particles.length>360) return;
+  const m = new THREE.Mesh(new THREE.BoxGeometry(size,size,size),
+    new THREE.MeshBasicMaterial({ color }));
+  m.position.set(x, 1, z);
+  scene.add(m);
+  const a = Math.random()*Math.PI*2, sp = 6+Math.random()*14;
+  game.particles.push({ mesh:m, vx:Math.cos(a)*sp, vy:4+Math.random()*6, vz:Math.sin(a)*sp, life:0.5, max:0.5 });
+}
+function addText(x,z,text,color,size){ game.texts.push({ x,z,text,color,life:1.4,max:1.4,size:size||16 }); }
+
+/* ============ 波次 / 生成 ============ */
+function pickEnemyType(w){
+  const pool=[['slime',10]];
+  if(w>=2) pool.push(['bat',5+w*0.8]);
+  if(w>=3) pool.push(['shooter',3+w*0.7]);
+  if(w>=5) pool.push(['tank',2+w*0.5]);
+  let total=0; for(const p of pool) total+=p[1];
+  let r=Math.random()*total;
+  for(const p of pool){ r-=p[1]; if(r<=0) return p[0]; }
+  return 'slime';
+}
+function startWave(){
+  game.wave++; game.phase='spawn'; game.spawnTimer=0.15;
+  const w=game.wave, count=Math.min(44, 4+Math.floor(w*1.8));
+  game.spawnQueue=[];
+  for(let i=0;i<count;i++) game.spawnQueue.push(pickEnemyType(w));
+  addText(0,0,'第 '+w+' 波',0xffffff,22);
+  sfx(440,0.18,'square',0.05,-120);
+}
+function spawnEnemy(type){
+  const base=ENEMY_TYPES[type], hpMul=1+(game.wave-1)*0.24;
+  let x,z; const side=Math.floor(Math.random()*4);
+  if(side===0){ x=rand(-ARENA,ARENA); z=-ARENA; }
+  else if(side===1){ x=ARENA; z=rand(-ARENA,ARENA); }
+  else if(side===2){ x=rand(-ARENA,ARENA); z=ARENA; }
+  else { x=-ARENA; z=rand(-ARENA,ARENA); }
+  const mesh=enemyMesh(type); mesh.position.set(x, base.r, z); scene.add(mesh);
+  game.enemies.push({ id:uid++, type, x, z, r:base.r, color:base.color,
+    hp:Math.ceil(base.hp*hpMul), maxHp:Math.ceil(base.hp*hpMul),
+    speed:base.speed*(1+(game.wave-1)*0.012), contact:base.contact, xp:base.xp,
+    flash:0, kx:0, kz:0, seed:Math.random()*10, shootTimer:rand(0.8,1.8),
+    strafe:Math.random()<0.5?1:-1, mesh });
+}
+function updateWave(dt){
+  if(game.phase==='break'){ game.phaseTimer-=dt; if(game.phaseTimer<=0) startWave(); return; }
+  if(game.phase==='spawn'){
+    game.spawnTimer-=dt;
+    if(game.spawnTimer<=0 && game.spawnQueue.length){
+      spawnEnemy(game.spawnQueue.shift());
+      game.spawnTimer=Math.max(0.16,0.52-game.wave*0.018);
+    }
+    if(game.spawnQueue.length===0) game.phase='fight';
+  }
+  if(game.phase==='fight' && game.enemies.length===0){
+    game.phase='break'; game.phaseTimer=2.2; game.score+=40*game.wave;
+    addText(0,-4,'波次清除！ +'+(40*game.wave),0x7cf07c,16);
+    sfx(660,0.1,'square',0.04); setTimeout(()=>sfx(880,0.14,'square',0.04),100);
+  }
+}
+
+/* ============ 玩家 ============ */
+function tryDash(){
+  if(!player || game.state!=='playing') return;
+  if(player.dashCd>0 || player.dashTime>0) return;
+  let ix=0,iz=0;
+  if(keys.KeyA||keys.ArrowLeft) ix--; if(keys.KeyD||keys.ArrowRight) ix++;
+  if(keys.KeyW||keys.ArrowUp) iz--; if(keys.KeyS||keys.ArrowDown) iz++;
+  if(ix===0&&iz===0){ ix=Math.cos(player.angle); iz=Math.sin(player.angle); }
+  const l=Math.hypot(ix,iz)||1;
+  player.dashDir={x:ix/l, z:iz/l};
+  player.dashTime=0.14; player.dashCd=player.dashMax; player.invuln=Math.max(player.invuln,0.22);
+  game.shake=Math.max(game.shake,3); sfx(240,0.14,'sawtooth',0.04,420);
+}
+function updatePlayer(dt){
+  let ix=0,iz=0;
+  if(keys.KeyA||keys.ArrowLeft) ix--; if(keys.KeyD||keys.ArrowRight) ix++;
+  if(keys.KeyW||keys.ArrowUp) iz--; if(keys.KeyS||keys.ArrowDown) iz++;
+  const len=Math.hypot(ix,iz); if(len>0){ ix/=len; iz/=len; }
+  if(player.dashTime>0){
+    player.dashTime-=dt;
+    player.x+=player.dashDir.x*player.speed*3.4*dt;
+    player.z+=player.dashDir.z*player.speed*3.4*dt;
+    if(Math.random()<0.7) spawnParticle(player.x,player.z,0x6cf8ff,0.5);
+  } else { player.x+=ix*player.speed*dt; player.z+=iz*player.speed*dt; }
+  player.x=clamp(player.x,-ARENA+2,ARENA-2);
+  player.z=clamp(player.z,-ARENA+2,ARENA-2);
+  if(player.dashCd>0) player.dashCd-=dt;
+  if(player.invuln>0) player.invuln-=dt;
+  player.fireTimer-=dt;
+
+  raycaster.setFromCamera(mouse.ndc, camera);
+  if(raycaster.ray.intersectPlane(groundPlane, aimPoint)){
+    player.angle=Math.atan2(aimPoint.x-player.x, aimPoint.z-player.z);
+  }
+  if(mouse.down && player.fireTimer<=0){ player.fireTimer=player.fireRate; shoot(); }
+}
+function shoot(){
+  const n=player.bullets, spread=0.11;
+  for(let i=0;i<n;i++){
+    const off=(i-(n-1)/2)*spread, a=player.angle+off;
+    const m=new THREE.Mesh(new THREE.SphereGeometry(0.35,8,8),
+      new THREE.MeshBasicMaterial({ color:0xffe066 }));
+    const bx=player.x+Math.sin(a)*2, bz=player.z+Math.cos(a)*2;
+    m.position.set(bx,1.2,bz); scene.add(m);
+    game.bullets.push({ mesh:m, x:bx, z:bz,
+      vx:Math.sin(a)*player.bulletSpeed, vz:Math.cos(a)*player.bulletSpeed,
+      r:0.4, dmg:player.dmg, pierce:player.pierce, hit:new Set(), life:1.6 });
+  }
+  for(let i=0;i<3;i++){ const a=player.angle+rand(-0.35,0.35);
+    spawnParticle(player.x+Math.sin(a)*2.4, player.z+Math.cos(a)*2.4, 0xffeeaa,0.4); }
+  game.shake=Math.max(game.shake,1.1); sfx(540,0.05,'square',0.028,-320);
+}
+function hurtPlayer(dmg){
+  if(player.invuln>0) return;
+  player.hp-=dmg; player.invuln=1.0; game.shake=9; game.flash=0.4;
+  game.combo=0; game.comboTimer=0; sfx(130,0.2,'sawtooth',0.06,-70);
+  for(let i=0;i<14;i++) spawnParticle(player.x,player.z,0xff4455,0.5);
+  if(player.hp<=0){ player.hp=0; gameOver(); }
+}
+
+/* ============ 子弹 ============ */
+function updateBullets(dt){
+  for(let i=game.bullets.length-1;i>=0;i--){
+    const b=game.bullets[i];
+    b.x+=b.vx*dt; b.z+=b.vz*dt; b.life-=dt;
+    if(b.life<=0 || Math.abs(b.x)>ARENA+4 || Math.abs(b.z)>ARENA+4){
+      scene.remove(b.mesh); game.bullets.splice(i,1); continue;
+    }
+    let removed=false;
+    for(let j=game.enemies.length-1;j>=0;j--){
+      const e=game.enemies[j];
+      if(b.hit.has(e.id)) continue;
+      if(Math.hypot(b.x-e.x,b.z-e.z) < e.r+b.r){
+        b.hit.add(e.id); damageEnemy(e,b.dmg,b.vx,b.vz);
+        if(b.pierce>0) b.pierce--; else { scene.remove(b.mesh); game.bullets.splice(i,1); removed=true; }
+        break;
+      }
+    }
+    if(removed) continue;
+  }
+  for(let i=game.ebullets.length-1;i>=0;i--){
+    const b=game.ebullets[i];
+    b.x+=b.vx*dt; b.z+=b.vz*dt; b.life-=dt;
+    if(b.life<=0 || Math.abs(b.x)>ARENA+4 || Math.abs(b.z)>ARENA+4){
+      scene.remove(b.mesh); game.ebullets.splice(i,1); continue;
+    }
+    if(Math.hypot(b.x-player.x,b.z-player.z) < player.r+b.r){
+      hurtPlayer(b.dmg); scene.remove(b.mesh); game.ebullets.splice(i,1);
+    }
+  }
+}
+function damageEnemy(e,dmg,vx,vz){
+  e.hp-=dmg; e.flash=0.1;
+  const l=Math.hypot(vx,vz)||1; e.kx+=vx/l*55; e.kz+=vz/l*55;
+  for(let i=0;i<4;i++) spawnParticle(e.x,e.z,e.color,0.45);
+  if(e.hp<=0) killEnemy(e);
+}
+function killEnemy(e){
+  const idx=game.enemies.indexOf(e); if(idx>=0) game.enemies.splice(idx,1);
+  scene.remove(e.mesh);
+  game.kills++; game.combo++; game.comboTimer=2.0;
+  const mult=1+Math.floor(game.combo/6)*0.5;
+  game.score+=Math.round(e.xp*10*mult);
+  for(let i=0;i<e.xp;i++){
+    const g=new THREE.Mesh(new THREE.OctahedronGeometry(0.55),
+      new THREE.MeshStandardMaterial({ color:0x5ad4ff, emissive:0x1a6a9a, emissiveIntensity:0.6 }));
+    g.position.set(e.x,1,e.z); scene.add(g);
+    game.gems.push({ mesh:g, x:e.x, z:e.z, vx:rand(-30,30), vz:rand(-30,30), value:1, life:22, spin:Math.random()*6 });
+  }
+  for(let i=0;i<11;i++) spawnParticle(e.x,e.z,e.color,0.5);
+  game.shake=Math.max(game.shake,2.6); sfx(rand(190,270),0.1,'square',0.032,-110);
+}
+
+/* ============ 敌人 ============ */
+function updateEnemies(dt){
+  for(let i=game.enemies.length-1;i>=0;i--){
+    const e=game.enemies[i];
+    e.flash=Math.max(0,e.flash-dt);
+    e.mesh.material.emissiveIntensity = e.flash>0 ? 1.2 : 0.35;
+    const dx=player.x-e.x, dz=player.z-e.z, d=Math.hypot(dx,dz)||1, nx=dx/d, nz=dz/d;
+    if(e.type==='shooter'){
+      const want=28; let mv=0;
+      if(d>want+5) mv=1; else if(d<want-6) mv=-1;
+      e.x+=nx*e.speed*mv*dt; e.z+=nz*e.speed*mv*dt;
+      e.x+=-nz*e.speed*0.55*dt*e.strafe; e.z+=nx*e.speed*0.55*dt*e.strafe;
+      e.shootTimer-=dt;
+      if(e.shootTimer<=0 && d<70){
+        e.shootTimer=Math.max(0.65,1.9-game.wave*0.075);
+        const a=Math.atan2(dx,dz);
+        const m=new THREE.Mesh(new THREE.SphereGeometry(0.5,8,8),
+          new THREE.MeshBasicMaterial({ color:0xff5a5a }));
+        m.position.set(e.x,1,e.z); scene.add(m);
+        game.ebullets.push({ mesh:m, x:e.x, z:e.z, vx:Math.sin(a)*22, vz:Math.cos(a)*22, r:0.5, dmg:1, life:4 });
+        sfx(320,0.07,'sine',0.02,-120);
+      }
+    } else if(e.type==='bat'){
+      const t=game.t+e.seed;
+      e.x+=(nx*e.speed+Math.cos(t*6.5)*22)*dt;
+      e.z+=(nz*e.speed+Math.sin(t*6.5)*22)*dt;
+    } else { e.x+=nx*e.speed*dt; e.z+=nz*e.speed*dt; }
+    e.x+=e.kx*dt; e.z+=e.kz*dt;
+    const damp=Math.max(0,1-dt*9); e.kx*=damp; e.kz*=damp;
+    e.x=clamp(e.x,-ARENA,ARENA); e.z=clamp(e.z,-ARENA,ARENA);
+    if(d < e.r+player.r && player.invuln<=0) hurtPlayer(e.contact||1);
+  }
+  const list=game.enemies;
+  for(let i=0;i<list.length;i++) for(let j=i+1;j<list.length;j++){
+    const a=list[i], b=list[j];
+    const dx=b.x-a.x, dz=b.z-a.z, d2=dx*dx+dz*dz, min=a.r+b.r;
+    if(d2<min*min && d2>0.01){
+      const dd=Math.sqrt(d2), push=(min-dd)*0.5, nx=dx/dd, nz=dz/dd;
+      a.x-=nx*push; a.z-=nz*push; b.x+=nx*push; b.z+=nz*push;
+    }
+  }
+}
+
+/* ============ 经验 ============ */
+function updateGems(dt){
+  for(let i=game.gems.length-1;i>=0;i--){
+    const g=game.gems[i]; g.life-=dt; g.spin+=dt*3;
+    g.mesh.rotation.y=g.spin; g.mesh.position.y=1+Math.sin(g.spin)*0.25;
+    const dx=player.x-g.x, dz=player.z-g.z, d=Math.hypot(dx,dz)||1;
+    if(d<player.magnet){
+      const pull=(1-d/player.magnet)*60+12;
+      g.vx+=dx/d*pull*dt; g.vz+=dz/d*pull*dt;
+    }
+    g.vx*=(1-dt*2.6); g.vz*=(1-dt*2.6);
+    g.x+=g.vx*dt; g.z+=g.vz*dt; g.mesh.position.x=g.x; g.mesh.position.z=g.z;
+    if(d<2){ collectGem(g); scene.remove(g.mesh); game.gems.splice(i,1); }
+    else if(g.life<=0){ scene.remove(g.mesh); game.gems.splice(i,1); }
+  }
+}
+function collectGem(g){
+  player.xp+=g.value; sfx(680+Math.random()*220,0.045,'square',0.018);
+  spawnParticle(g.x,g.z,0x8fd8ff,0.4);
+  if(player.xp>=player.xpNext) levelUp();
+}
+function levelUp(){
+  player.level++; player.xp-=player.xpNext; player.xpNext=Math.floor(player.xpNext*1.32+2);
+  game.state='upgrade'; game.choices=pickChoices(3);
+  sfx(880,0.13,'square',0.05); setTimeout(()=>sfx(1180,0.16,'square',0.045),90);
+  showUpgrades();
+}
+function pickChoices(n){
+  const pool=UPGRADES.slice(), out=[];
+  for(let i=0;i<n && pool.length;i++) out.push(pool.splice(Math.floor(Math.random()*pool.length),1)[0]);
+  return out;
+}
+function chooseUpgrade(i){
+  const c=game.choices[i]; if(!c) return;
+  c.apply(player); sfx(720,0.08,'square',0.04,320);
+  game.state='playing'; game.choices=[];
+  document.getElementById('cards').innerHTML='';
+  if(player.xp>=player.xpNext) levelUp();
+}
+
+/* ============ 流程 ============ */
+function startGame(){
+  player=newPlayer(); uid=1;
+  for(const arr of [game.enemies,game.bullets,game.ebullets,game.gems,game.particles]){
+    for(const o of arr) if(o.mesh) scene.remove(o.mesh);
+    arr.length=0;
+  }
+  game.state='playing'; game.t=0; game.wave=0; game.phase='break'; game.phaseTimer=1.0;
+  game.score=0; game.kills=0; game.combo=0; game.comboTimer=0; game.shake=0; game.flash=0;
+  hideOverlay();
+}
+function gameOver(){
+  game.state='gameover'; game.shake=14;
+  sfx(180,0.5,'sawtooth',0.07,-140);
+  for(let i=0;i<30;i++) spawnParticle(player.x,player.z,0xff4455,0.6);
+  showGameOver();
+}
+
+function onClick(){
+  initAudio();
+  if(game.state==='title'){ startGame(); return; }
+  if(game.state==='gameover'){ startGame(); return; }
+}
+function onKeyPress(code){
+  initAudio();
+  if(code==='Space') tryDash();
+  if(code==='KeyP'||code==='Escape'){
+    if(game.state==='playing'){ game.state='paused'; showOverlay('已暂停',null); }
+    else if(game.state==='paused'){ game.state='playing'; hideOverlay(); }
+  }
+  if(game.state==='title' && (code==='Enter'||code==='Space')) startGame();
+  if(game.state==='gameover' && (code==='Enter'||code==='KeyR')) startGame();
+}
+
+/* ============ 覆盖层 / HUD ============ */
+const overlay=document.getElementById('overlay');
+function hideOverlay(){ overlay.classList.add('hidden'); }
+function showOverlay(title, sub){
+  overlay.classList.remove('hidden');
+  overlay.innerHTML='<h1>'+title+'</h1>'+(sub?'<div class="sub">'+sub+'</div>':'')+
+    '<div class="blink">点击屏幕继续</div>';
+}
+function showUpgrades(){
+  overlay.classList.remove('hidden');
+  let html='<h1 style="font-size:24px">等级提升！</h1>'+
+    '<div class="sub">选择一项强化</div><div id="cards">';
+  game.choices.forEach((c,i)=>{
+    html+='<div class="card" data-i="'+i+'"><div class="ico"></div>'+
+      '<div class="nm">'+c.name+'</div><div class="ds">'+c.desc+'</div>'+
+      '<div class="key">['+(i+1)+']</div></div>';
+  });
+  html+='</div>';
+  overlay.innerHTML=html;
+  overlay.querySelectorAll('.card').forEach(el=>{
+    el.addEventListener('click', ()=>chooseUpgrade(parseInt(el.dataset.i)));
+  });
+  addEventListener('keydown', function one(e){
+    if(['Digit1','Digit2','Digit3'].includes(e.code)){
+      chooseUpgrade(parseInt(e.code.slice(5))-1);
+      removeEventListener('keydown', one);
+    }
+  });
+}
+function showGameOver(){
+  overlay.classList.remove('hidden');
+  overlay.innerHTML='<div class="big">游戏结束</div>'+
+    '<div class="stat">得分 '+game.score+'</div>'+
+    '<div class="stat">抵达波次 '+game.wave+' · 击杀 '+game.kills+'</div>'+
+    '<div class="blink">点击屏幕 / 按 R 重新开始</div>';
+}
+
+const elHp=document.getElementById('hp'), elXp=document.getElementById('xpfill'),
+  elScore=document.getElementById('score'), elWave=document.getElementById('wave'),
+  elCombo=document.getElementById('combo'), elDash=document.getElementById('dashfill'),
+  elNext=document.getElementById('nextwave');
+function updateHUD(){
+  let h='';
+  for(let i=0;i<player.maxHp;i++) h+='<div class="heart'+(i<player.hp?'':' empty')+'"></div>';
+  elHp.innerHTML=h;
+  elXp.style.width=(clamp(player.xp/player.xpNext,0,1)*100)+'%';
+  elScore.textContent='分数 '+game.score;
+  elWave.textContent='波次 '+Math.max(1,game.wave)+' · Lv.'+player.level;
+  elCombo.textContent=game.combo>=3?('x'+game.combo+' 连击'):'';
+  elDash.style.width=(player.dashCd>0?(1-player.dashCd/player.dashMax)*100:100)+'%';
+  elNext.textContent=(game.state==='playing'&&game.phase==='break')?('下一波来袭… '+Math.ceil(game.phaseTimer)):'';
+}
+
+/* 浮动文字（投影到屏幕坐标） */
+function updateTexts(dt){
+  for(let i=game.texts.length-1;i>=0;i--){
+    const t=game.texts[i]; t.life-=dt;
+    if(t.life<=0){ if(t.el) t.el.remove(); game.texts.splice(i,1); continue; }
+    if(!t.el){
+      t.el=document.createElement('div');
+      t.el.style.cssText='position:fixed;z-index:15;pointer-events:none;font-weight:bold;'+
+        'font-family:monospace;transform:translate(-50%,-50%);text-shadow:0 0 8px #000;';
+      t.el.style.color='#'+t.color.toString(16).padStart(6,'0');
+      t.el.style.fontSize=t.size+'px'; t.el.textContent=t.text;
+      document.body.appendChild(t.el);
+    }
+    const v=new THREE.Vector3(t.x,3,t.z).project(camera);
+    t.el.style.left=((v.x*0.5+0.5)*innerWidth)+'px';
+    t.el.style.top=((-v.y*0.5+0.5)*innerHeight)+'px';
+    t.el.style.opacity=clamp(t.life/t.max,0,1);
+  }
+}
+function updateParticles(dt){
+  for(let i=game.particles.length-1;i>=0;i--){
+    const p=game.particles[i];
+    p.mesh.position.x+=p.vx*dt; p.mesh.position.y+=p.vy*dt; p.mesh.position.z+=p.vz*dt;
+    p.vy-=22*dt; if(p.mesh.position.y<0.2) p.mesh.position.y=0.2;
+    p.life-=dt;
+    p.mesh.scale.setScalar(clamp(p.life/p.max,0,1));
+    if(p.life<=0){ scene.remove(p.mesh); game.particles.splice(i,1); }
+  }
+}
+
+/* ============ 主循环 ============ */
+function animate(now){
+  requestAnimationFrame(animate);
+  const dt=Math.min(0.05,(now-(animate.last||now))/1000); animate.last=now;
+  game.t+=dt;
+  game.shake=Math.max(0,game.shake-dt*38);
+  game.flash=Math.max(0,game.flash-dt*2.2);
+  if(game.comboTimer>0){ game.comboTimer-=dt; if(game.comboTimer<=0) game.combo=0; }
+
+  if(game.state==='playing'){
+    updatePlayer(dt); updateBullets(dt); updateEnemies(dt); updateGems(dt); updateWave(dt);
+  }
+  playerGroup.position.set(player.x, 1, player.z);
+  playerGroup.rotation.y=player.angle;
+  bodyMat.emissiveIntensity=player.invuln>0?(Math.floor(game.t*22)%2?0.2:1.0):0.6;
+  playerLight.position.set(player.x,6,player.z);
+
+  for(const e of game.enemies) e.mesh.position.set(e.x, e.r + (e.type==='bat'?Math.sin(game.t*4+e.seed)*0.4:0), e.z);
+
+  updateParticles(dt); updateTexts(dt);
+
+  controls.target.set(player.x, 0, player.z);
+  controls.update();
+  if(game.shake>0.2){
+    camera.position.x+=rand(-1,1)*game.shake*0.15;
+    camera.position.z+=rand(-1,1)*game.shake*0.15;
+  }
+
+  scene.background.setHex(game.flash>0 ? 0x551018 : 0x05070d);
+
+  updateHUD();
+  renderer.render(scene, camera);
+}
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>
