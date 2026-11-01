@@ -54,31 +54,6 @@ python -m http.server 8001
 # 浏览器访问 http://localhost:8001
 ```
 
-## 提交到 GitHub + 开启 Pages
-
-1. 在 GitHub 新建**公开**仓库，命名为 **`ip-02-three-game`**。
-2. 在本目录执行：
-
-```bash
-git remote add origin https://github.com/<你的用户名>/ip-02-three-game.git
-git branch -M main
-git add .
-git commit -m "作业二：像素猎手 PIXEL HUNTER 3D (Three.js)"
-git push -u origin main
-```
-
-3. 仓库 **Settings → Pages** → Source 选 `main` 分支、`/ (root)` → 保存。
-4. 几分钟后访问 `https://<用户名>.github.io/ip-02-three-game/` 即可在线游玩。
-
-## 录屏要求（作业通用）
-
-录制 `学号_姓名_作业2.mp4`（mp4 / H.264，≥1280×720），流程包含：
-1. 打开项目目录
-2. 打开 `index.html`（或 GitHub Pages 链接）
-3. 本地运行游戏
-4. 完整玩一局（移动 / 射击 / 升级 / 撑过几波 / 失败重开）
-5. 展示仓库提交记录（GitHub 仓库页或 `git log`）
-
 ## 创作说明
 
 以「在发光网格竞技场中独自对抗无尽敌潮」为核心意象：用冷色调网格地面 + 暖色自发光敌人形成对比，强化「猎手 vs 兽群」的紧张感。4 类敌人对应不同形状与行为（史莱姆追击、蝙蝠蛇形游走、射手远程、坦克高血），配合升级卡牌构成 Roguelike 循环。技术上全程用 Three.js 原生 API 搭建，未引入游戏框架，便于老师查看场景/物体/逻辑分块。
