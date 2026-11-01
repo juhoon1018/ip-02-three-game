@@ -84,12 +84,12 @@
   <p>WASD 移动 · 鼠标瞄准射击<br>空格冲刺闪避 · 击杀敌人升级强化<br>在无尽的波次中活下去</p>
 </div>
 
-<!-- Three.js 通过 importmap 从 CDN 加载（版本固定 0.160.0，与本地副本一致） -->
+<!-- Three.js 通过本地 libs 加载（离线可用，不依赖任何 CDN） -->
 <script type="importmap">
 {
   "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    "three": "./libs/three.module.js",
+    "three/addons/": "./libs/jsm/"
   }
 }
 </script>
